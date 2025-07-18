@@ -50,6 +50,7 @@ export default function GameClient() {
     setTiles([]);
     if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = undefined;
     }
   }, []);
 
@@ -58,10 +59,17 @@ export default function GameClient() {
       cancelAnimationFrame(animationFrameId.current);
       animationFrameId.current = undefined;
     }
-    saveScore(score, difficulty);
+    // We get the score and difficulty directly from the state when stopping the game
+    setScore(currentScore => {
+      setDifficulty(currentDifficulty => {
+        saveScore(currentScore, currentDifficulty);
+        return currentDifficulty;
+      });
+      return currentScore;
+    });
     setGameState('gameover');
-  }, [score, difficulty, saveScore]);
-  
+  }, [saveScore]);
+
   const startGame = () => {
     resetGame();
     setGameState('playing');
@@ -75,7 +83,9 @@ export default function GameClient() {
     lastSpawnTimeRef.current = performance.now();
     
     const gameLoop = () => {
-      const gameAreaHeight = gameAreaRef.current?.clientHeight ?? 0;
+      if (!gameAreaRef.current) return;
+
+      const gameAreaHeight = gameAreaRef.current.clientHeight;
       const currentSettings = DIFFICULTY_SETTINGS[difficulty];
       let tileMissed = false;
   
@@ -128,39 +138,38 @@ export default function GameClient() {
     };
   }, [gameState, difficulty, resetGame, stopGame]);
   
-  const handleLaneClick = (laneIndex: number) => {
-    if (gameState !== 'playing') return;
-    const gameAreaHeight = gameAreaRef.current?.clientHeight ?? 0;
+  const handleLaneClick = useCallback((laneIndex: number) => {
+    if (gameState !== 'playing' || !gameAreaRef.current) return;
+    const gameAreaHeight = gameAreaRef.current.clientHeight;
     const hitZoneBottom = gameAreaHeight - GAME_AREA_BOTTOM_PADDING;
     const hitZoneTop = hitZoneBottom - HIT_ZONE_HEIGHT;
     
     let hit = false;
-    let missed = false;
-    const newTiles = tiles.filter(tile => {
-      if (tile.lane === laneIndex) {
-        const tileBottom = tile.y + tile.height;
-        if (tileBottom > hitZoneTop && tile.y < hitZoneBottom) {
-          hit = true;
-          return false; // Remove tile
-        }
-      }
-      return true;
-    });
 
-    if (hit) {
-      setCombo(prev => {
-        const newCombo = prev + 1;
-        setScore(prevScore => prevScore + 10 + newCombo);
-        return newCombo;
+    setTiles(currentTiles => {
+      const remainingTiles = currentTiles.filter(tile => {
+        if (tile.lane === laneIndex) {
+          const tileBottom = tile.y + tile.height;
+          if (tileBottom > hitZoneTop && tile.y < hitZoneBottom) {
+            hit = true;
+            return false;
+          }
+        }
+        return true;
       });
-      setTiles(newTiles);
-    } else {
-      // If no tile was hit in this lane, check if any other tile should have been hit
-      // This is a simplification; a more robust implementation might handle this differently.
-      // For now, any click outside a hitable tile in the lane is a "miss" that resets combo.
-      setCombo(0);
-    }
-  };
+
+      if (hit) {
+        setCombo(prev => {
+          const newCombo = prev + 1;
+          setScore(prevScore => prevScore + 10 + newCombo);
+          return newCombo;
+        });
+      } else {
+        setCombo(0);
+      }
+      return remainingTiles;
+    });
+  }, [gameState]);
   
   const renderMenu = () => (
     <div className="bg-card/80 backdrop-blur-lg p-8 rounded-xl border border-accent/30 glowing-card w-full max-w-md text-center">
