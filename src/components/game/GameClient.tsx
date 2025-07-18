@@ -30,14 +30,24 @@ export default function GameClient() {
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const animationFrameId = useRef<number>();
   const lastSpawnTimeRef = useRef<number>(0);
+  const scoreRef = useRef(0);
+  const difficultyRef = useRef(difficulty);
+
+  useEffect(() => {
+    scoreRef.current = score;
+  }, [score]);
+
+  useEffect(() => {
+    difficultyRef.current = difficulty;
+  }, [difficulty]);
   
-  const saveScore = useCallback((currentScore: number, currentDifficulty: Difficulty) => {
-    if (currentScore > 0) {
+  const saveScore = useCallback(() => {
+    if (scoreRef.current > 0) {
       const newHighScore: HighScore = {
         id: crypto.randomUUID(),
         songName: 'Random Mode',
-        score: currentScore,
-        difficulty: currentDifficulty,
+        score: scoreRef.current,
+        difficulty: difficultyRef.current,
         date: new Date().toISOString(),
       };
       setHighScores(prev => [...prev, newHighScore]);
@@ -59,14 +69,7 @@ export default function GameClient() {
       cancelAnimationFrame(animationFrameId.current);
       animationFrameId.current = undefined;
     }
-    // We get the score and difficulty directly from the state when stopping the game
-    setScore(currentScore => {
-      setDifficulty(currentDifficulty => {
-        saveScore(currentScore, currentDifficulty);
-        return currentDifficulty;
-      });
-      return currentScore;
-    });
+    saveScore();
     setGameState('gameover');
   }, [saveScore]);
 
@@ -138,38 +141,38 @@ export default function GameClient() {
     };
   }, [gameState, difficulty, resetGame, stopGame]);
   
-  const handleLaneClick = useCallback((laneIndex: number) => {
+  const handleLaneClick = (laneIndex: number) => {
     if (gameState !== 'playing' || !gameAreaRef.current) return;
+
     const gameAreaHeight = gameAreaRef.current.clientHeight;
     const hitZoneBottom = gameAreaHeight - GAME_AREA_BOTTOM_PADDING;
     const hitZoneTop = hitZoneBottom - HIT_ZONE_HEIGHT;
     
     let hit = false;
+    let targetTileId: number | null = null;
 
-    setTiles(currentTiles => {
-      const remainingTiles = currentTiles.filter(tile => {
-        if (tile.lane === laneIndex) {
-          const tileBottom = tile.y + tile.height;
-          if (tileBottom > hitZoneTop && tile.y < hitZoneBottom) {
-            hit = true;
-            return false;
-          }
+    for (const tile of tiles) {
+      if (tile.lane === laneIndex) {
+        const tileBottom = tile.y + tile.height;
+        if (tileBottom > hitZoneTop && tile.y < hitZoneBottom) {
+          hit = true;
+          targetTileId = tile.id;
+          break;
         }
-        return true;
-      });
-
-      if (hit) {
-        setCombo(prev => {
-          const newCombo = prev + 1;
-          setScore(prevScore => prevScore + 10 + newCombo);
-          return newCombo;
-        });
-      } else {
-        setCombo(0);
       }
-      return remainingTiles;
-    });
-  }, [gameState]);
+    }
+
+    if (hit && targetTileId !== null) {
+      setTiles(currentTiles => currentTiles.filter(t => t.id !== targetTileId));
+      setCombo(prev => {
+        const newCombo = prev + 1;
+        setScore(prevScore => prevScore + 10 + newCombo);
+        return newCombo;
+      });
+    } else {
+      setCombo(0);
+    }
+  };
   
   const renderMenu = () => (
     <div className="bg-card/80 backdrop-blur-lg p-8 rounded-xl border border-accent/30 glowing-card w-full max-w-md text-center">
@@ -264,3 +267,5 @@ export default function GameClient() {
     </>
   );
 }
+
+    
