@@ -83,6 +83,7 @@ export default function GameClient() {
         return;
     }
 
+    let missedTile = false;
     // Move tiles
     setTiles(prevTiles => {
       const newTiles = prevTiles
@@ -90,8 +91,7 @@ export default function GameClient() {
         .filter(tile => {
           if (tile.y > gameAreaHeight) {
             // Missed tile
-            setCombo(0);
-            endGame();
+            missedTile = true;
             return false;
           }
           return true;
@@ -99,29 +99,35 @@ export default function GameClient() {
       return newTiles;
     });
 
+    if (missedTile) {
+        setCombo(0);
+        endGame();
+        return;
+    }
+
     // Spawn new tiles
     const now = performance.now();
     if (now - lastSpawnTimeRef.current > settings.spawnRate) {
         lastSpawnTimeRef.current = now;
-        const newLane = Math.floor(Math.random() * LANES);
+        let newLane = Math.floor(Math.random() * LANES);
         
         // Avoid spawning in the same lane twice in a row on easier difficulties
-        if (difficulty !== 'hard') {
-            const lastTile = tiles[tiles.length -1];
-            if (lastTile?.lane === newLane) {
-                 animationFrameId.current = requestAnimationFrame(gameLoop);
-                 return;
+        setTiles(prevTiles => {
+            if (difficulty !== 'hard') {
+                const lastTile = prevTiles[prevTiles.length -1];
+                if (lastTile?.lane === newLane) {
+                    newLane = (newLane + 1) % LANES;
+                }
             }
-        }
-        
-        setTiles(prevTiles => [
-            ...prevTiles,
-            { id: now, lane: newLane, y: -TILE_HEIGHT, height: TILE_HEIGHT },
-        ]);
+            return [
+                ...prevTiles,
+                { id: now, lane: newLane, y: -TILE_HEIGHT, height: TILE_HEIGHT },
+            ];
+        });
     }
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [settings.speed, settings.spawnRate, tiles, difficulty, endGame]);
+  }, [settings.speed, settings.spawnRate, difficulty, endGame]);
 
   const startGame = () => {
     if (!song.url) return;
