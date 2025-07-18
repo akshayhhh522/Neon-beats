@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -64,44 +65,49 @@ export default function GameClient() {
       audioRef.current.pause();
     }
 
-    if (score > 0) {
-      const newHighScore: HighScore = {
-        id: crypto.randomUUID(),
-        songName: song.name,
-        score,
-        difficulty,
-        date: new Date().toISOString(),
-      };
-      setHighScores([...highScores, newHighScore]);
-    }
-  }, [score, song.name, difficulty, highScores, setHighScores]);
+    setScore(currentScore => {
+      if (currentScore > 0) {
+        const newHighScore: HighScore = {
+          id: crypto.randomUUID(),
+          songName: song.name,
+          score: currentScore,
+          difficulty,
+          date: new Date().toISOString(),
+        };
+        setHighScores(prevHighScores => [...prevHighScores, newHighScore]);
+      }
+      return currentScore;
+    });
+  }, [song.name, difficulty, setHighScores]);
 
   const gameLoop = useCallback(() => {
     const gameAreaHeight = gameAreaRef.current?.clientHeight ?? 0;
-    if (gameAreaHeight === 0) {
+    if (gameAreaHeight === 0 || gameState !== 'playing') {
         animationFrameId.current = requestAnimationFrame(gameLoop);
         return;
     }
 
     let missedTile = false;
-    // Move tiles
+    
     setTiles(prevTiles => {
-      const newTiles = prevTiles
-        .map(tile => ({ ...tile, y: tile.y + settings.speed }))
-        .filter(tile => {
-          if (tile.y > gameAreaHeight) {
-            // Missed tile
-            missedTile = true;
-            return false;
-          }
-          return true;
+        const newTiles = prevTiles.map(tile => ({ ...tile, y: tile.y + settings.speed }));
+        const filteredTiles = newTiles.filter(tile => {
+            if (tile.y > gameAreaHeight) {
+                missedTile = true;
+                return false;
+            }
+            return true;
         });
-      return newTiles;
-    });
+        
+        if (missedTile) {
+            setCombo(0);
+            endGame();
+        }
 
+        return filteredTiles;
+    });
+    
     if (missedTile) {
-        setCombo(0);
-        endGame();
         return;
     }
 
@@ -127,7 +133,7 @@ export default function GameClient() {
     }
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [settings.speed, settings.spawnRate, difficulty, endGame]);
+  }, [settings.speed, settings.spawnRate, difficulty, endGame, gameState]);
 
   const startGame = () => {
     if (!song.url) return;
@@ -137,7 +143,6 @@ export default function GameClient() {
     if (audioRef.current) {
       audioRef.current.play();
     }
-    animationFrameId.current = requestAnimationFrame(gameLoop);
   };
   
   useEffect(() => {
