@@ -55,7 +55,7 @@ export default function GameClient() {
       audioRef.current.pause();
     }
   }, []);
-  
+
   const endGame = useCallback(() => {
     setGameState('gameover');
     if (animationFrameId.current) {
@@ -66,49 +66,48 @@ export default function GameClient() {
     }
 
     setScore(currentScore => {
-      if (currentScore > 0) {
-        const newHighScore: HighScore = {
-          id: crypto.randomUUID(),
-          songName: song.name,
-          score: currentScore,
-          difficulty,
-          date: new Date().toISOString(),
-        };
-        setHighScores(prevHighScores => [...prevHighScores, newHighScore]);
-      }
-      return currentScore;
+        if (currentScore > 0) {
+            const newHighScore: HighScore = {
+                id: crypto.randomUUID(),
+                songName: song.name,
+                score: currentScore,
+                difficulty,
+                date: new Date().toISOString(),
+            };
+            setHighScores(prev => [...prev, newHighScore]);
+        }
+        return currentScore;
     });
   }, [song.name, difficulty, setHighScores]);
-
+  
   const gameLoop = useCallback(() => {
-    const gameAreaHeight = gameAreaRef.current?.clientHeight ?? 0;
-    if (gameAreaHeight === 0 || gameState !== 'playing') {
-        animationFrameId.current = requestAnimationFrame(gameLoop);
-        return;
-    }
+    if (gameState !== 'playing') return;
 
-    let missedTile = false;
+    const gameAreaHeight = gameAreaRef.current?.clientHeight ?? 0;
+    
+    let shouldEndGame = false;
     
     setTiles(prevTiles => {
-        const newTiles = prevTiles.map(tile => ({ ...tile, y: tile.y + settings.speed }));
-        const filteredTiles = newTiles.filter(tile => {
-            if (tile.y > gameAreaHeight) {
-                missedTile = true;
-                return false;
-            }
-            return true;
-        });
-        
-        if (missedTile) {
-            setCombo(0);
-            endGame();
+      const newTiles = prevTiles.map(tile => ({ ...tile, y: tile.y + settings.speed }));
+      
+      const filteredTiles = newTiles.filter(tile => {
+        if (tile.y > gameAreaHeight) {
+          shouldEndGame = true;
+          return false;
         }
+        return true;
+      });
 
-        return filteredTiles;
+      if (shouldEndGame) {
+        setCombo(0);
+      }
+      
+      return filteredTiles;
     });
-    
-    if (missedTile) {
-        return;
+
+    if (shouldEndGame) {
+      endGame();
+      return;
     }
 
     // Spawn new tiles
@@ -117,9 +116,8 @@ export default function GameClient() {
         lastSpawnTimeRef.current = now;
         let newLane = Math.floor(Math.random() * LANES);
         
-        // Avoid spawning in the same lane twice in a row on easier difficulties
         setTiles(prevTiles => {
-            if (difficulty !== 'hard') {
+            if (difficulty !== 'hard' && prevTiles.length > 0) {
                 const lastTile = prevTiles[prevTiles.length -1];
                 if (lastTile?.lane === newLane) {
                     newLane = (newLane + 1) % LANES;
@@ -133,7 +131,7 @@ export default function GameClient() {
     }
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [settings.speed, settings.spawnRate, difficulty, endGame, gameState]);
+  }, [settings.speed, settings.spawnRate, difficulty, gameState, endGame]);
 
   const startGame = () => {
     if (!song.url) return;
@@ -278,7 +276,7 @@ export default function GameClient() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <Button variant="outline" onClick={() => setGameState('menu')}>Main Menu</Button>
+            <Button variant="outline" onClick={() => { resetGame(); setGameState('menu'); }}>Main Menu</Button>
             <AlertDialogAction onClick={startGame}>Play Again</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
