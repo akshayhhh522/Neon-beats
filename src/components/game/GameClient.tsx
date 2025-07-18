@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import { DIFFICULTY_SETTINGS, LANES, TILE_HEIGHT, HIT_ZONE_HEIGHT, GAME_AREA_BOTTOM_PADDING } from '@/lib/constants';
 import type { Tile, Difficulty, GameState, HighScore } from '@/lib/types';
-import { Music, Upload, Play, Star, Plus } from 'lucide-react';
+import { Play, Upload } from 'lucide-react';
 
 export default function GameClient() {
   const [gameState, setGameState] = useState<GameState>('menu');
@@ -54,9 +54,25 @@ export default function GameClient() {
       audioRef.current.currentTime = 0;
       audioRef.current.pause();
     }
+    if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+    }
   }, []);
-
-  const endGame = useCallback(() => {
+  
+  const saveScore = useCallback(() => {
+    if (score > 0) {
+      const newHighScore: HighScore = {
+        id: crypto.randomUUID(),
+        songName: song.name,
+        score: score,
+        difficulty,
+        date: new Date().toISOString(),
+      };
+      setHighScores(prev => [...prev, newHighScore]);
+    }
+  }, [score, song.name, difficulty, setHighScores]);
+  
+  const handleGameEnd = useCallback(() => {
     setGameState('gameover');
     if (animationFrameId.current) {
       cancelAnimationFrame(animationFrameId.current);
@@ -64,33 +80,17 @@ export default function GameClient() {
     if (audioRef.current) {
       audioRef.current.pause();
     }
+    saveScore();
+  }, [saveScore]);
 
-    setScore(currentScore => {
-        if (currentScore > 0) {
-            const newHighScore: HighScore = {
-                id: crypto.randomUUID(),
-                songName: song.name,
-                score: currentScore,
-                difficulty,
-                date: new Date().toISOString(),
-            };
-            setHighScores(prev => [...prev, newHighScore]);
-        }
-        return currentScore;
-    });
-  }, [song.name, difficulty, setHighScores]);
-  
   const gameLoop = useCallback(() => {
-    if (gameState !== 'playing') return;
-
     const gameAreaHeight = gameAreaRef.current?.clientHeight ?? 0;
-    
     let shouldEndGame = false;
-    
+
     setTiles(prevTiles => {
-      const newTiles = prevTiles.map(tile => ({ ...tile, y: tile.y + settings.speed }));
-      
-      const filteredTiles = newTiles.filter(tile => {
+      const updatedTiles = prevTiles.map(tile => ({ ...tile, y: tile.y + settings.speed }));
+
+      const visibleTiles = updatedTiles.filter(tile => {
         if (tile.y > gameAreaHeight) {
           shouldEndGame = true;
           return false;
@@ -101,12 +101,12 @@ export default function GameClient() {
       if (shouldEndGame) {
         setCombo(0);
       }
-      
-      return filteredTiles;
+
+      return visibleTiles;
     });
 
     if (shouldEndGame) {
-      endGame();
+      handleGameEnd();
       return;
     }
 
@@ -131,7 +131,7 @@ export default function GameClient() {
     }
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [settings.speed, settings.spawnRate, difficulty, gameState, endGame]);
+  }, [settings.speed, settings.spawnRate, difficulty, handleGameEnd]);
 
   const startGame = () => {
     if (!song.url) return;
@@ -139,13 +139,17 @@ export default function GameClient() {
     setGameState('playing');
     lastSpawnTimeRef.current = performance.now();
     if (audioRef.current) {
-      audioRef.current.play();
+      audioRef.current.play().catch(e => console.error("Error playing audio:", e));
     }
   };
   
   useEffect(() => {
     if (gameState === 'playing') {
       animationFrameId.current = requestAnimationFrame(gameLoop);
+    } else {
+        if (animationFrameId.current) {
+            cancelAnimationFrame(animationFrameId.current);
+        }
     }
     return () => {
       if (animationFrameId.current) {
@@ -262,7 +266,7 @@ export default function GameClient() {
 
   return (
     <>
-      {song.url && <audio ref={audioRef} src={song.url} onEnded={endGame} />}
+      {song.url && <audio ref={audioRef} src={song.url} onEnded={handleGameEnd} />}
       
       {gameState === 'menu' && renderMenu()}
       {gameState === 'playing' && renderGame()}
