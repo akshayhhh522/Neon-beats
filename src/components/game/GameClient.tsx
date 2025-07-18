@@ -36,8 +36,13 @@ export default function GameClient() {
   const animationFrameId = useRef<number>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const currentGameSettings = useRef<{songName: string; difficulty: Difficulty}>({songName: '', difficulty: 'medium'});
+  const scoreRef = useRef(0);
+  const currentGameSettings = useRef<{songName: string; difficulty: Difficulty}>({songName: 'No song selected', difficulty: 'medium'});
 
+  useEffect(() => {
+    scoreRef.current = score;
+  }, [score]);
+  
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -46,73 +51,69 @@ export default function GameClient() {
     }
   };
 
-  const resetGame = useCallback(() => {
-    setScore(0);
-    setCombo(0);
-    setTiles([]);
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.pause();
-    }
-    if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-    }
-  }, []);
-  
-  const saveScore = useCallback((currentScore: number) => {
-    if (currentScore > 0) {
+  const saveScore = useCallback(() => {
+    const finalScore = scoreRef.current;
+    if (finalScore > 0) {
       const newHighScore: HighScore = {
         id: crypto.randomUUID(),
         songName: currentGameSettings.current.songName,
-        score: currentScore,
+        score: finalScore,
         difficulty: currentGameSettings.current.difficulty,
         date: new Date().toISOString(),
       };
       setHighScores(prev => [...prev, newHighScore]);
     }
   }, [setHighScores]);
-  
-  const handleGameEnd = useCallback(() => {
-    setGameState(oldState => {
-      if (oldState === 'playing') {
-        if (animationFrameId.current) {
-          cancelAnimationFrame(animationFrameId.current);
-        }
-        if (audioRef.current) {
-          audioRef.current.pause();
-        }
-        saveScore(score);
-        return 'gameover';
-      }
-      return oldState;
-    });
-  }, [saveScore, score]);
 
+  const stopGame = useCallback(() => {
+    if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+    }
+    if (audioRef.current) {
+        audioRef.current.pause();
+    }
+    setGameState(oldState => {
+        if (oldState === 'playing') {
+            saveScore();
+            return 'gameover';
+        }
+        return oldState;
+    });
+  }, [saveScore]);
+
+  const resetGame = useCallback(() => {
+    setScore(0);
+    setCombo(0);
+    setTiles([]);
+    scoreRef.current = 0;
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+    }
+    if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+    }
+  }, []);
+  
   const gameLoop = useCallback(() => {
     const gameAreaHeight = gameAreaRef.current?.clientHeight ?? 0;
     const currentSettings = DIFFICULTY_SETTINGS[currentGameSettings.current.difficulty];
-    let shouldEndGame = false;
+    let tileMissed = false;
 
     setTiles(prevTiles => {
       const updatedTiles = prevTiles.map(tile => ({ ...tile, y: tile.y + currentSettings.speed }));
-
       const visibleTiles = updatedTiles.filter(tile => {
         if (tile.y > gameAreaHeight) {
-          shouldEndGame = true; // A tile was missed
+          tileMissed = true;
           return false;
         }
         return true;
       });
-
-      if (shouldEndGame) {
-        setCombo(0);
-      }
-
       return visibleTiles;
     });
 
-    if (shouldEndGame) {
-      handleGameEnd();
+    if (tileMissed) {
+      setCombo(0);
+      stopGame();
       return;
     }
 
@@ -137,7 +138,7 @@ export default function GameClient() {
     }
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [handleGameEnd]);
+  }, [stopGame]);
 
   const startGame = () => {
     if (!song.url) return;
@@ -153,10 +154,6 @@ export default function GameClient() {
   useEffect(() => {
     if (gameState === 'playing') {
       animationFrameId.current = requestAnimationFrame(gameLoop);
-    } else {
-        if (animationFrameId.current) {
-            cancelAnimationFrame(animationFrameId.current);
-        }
     }
     return () => {
       if (animationFrameId.current) {
@@ -188,7 +185,6 @@ export default function GameClient() {
       setCombo(prev => prev + 1);
       setTiles(newTiles);
     } else {
-      // Misclick
       setCombo(0);
     }
   };
@@ -273,7 +269,7 @@ export default function GameClient() {
 
   return (
     <>
-      {song.url && <audio ref={audioRef} src={song.url} onEnded={handleGameEnd} />}
+      {song.url && <audio ref={audioRef} src={song.url} onEnded={stopGame} />}
       
       {gameState === 'menu' && renderMenu()}
       {gameState === 'playing' && renderGame()}
