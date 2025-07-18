@@ -32,11 +32,16 @@ export default function GameClient() {
   const animationFrameId = useRef<number>();
   
   const scoreRef = useRef(0);
+  const gameStateRef = useRef(gameState);
   const currentGameSettings = useRef<{songName: string; difficulty: Difficulty}>({songName: 'Random Mode', difficulty: 'medium'});
 
   useEffect(() => {
     scoreRef.current = score;
   }, [score]);
+
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
 
   const saveScore = useCallback(() => {
     const finalScore = scoreRef.current;
@@ -56,13 +61,10 @@ export default function GameClient() {
     if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
     }
-    setGameState(oldState => {
-        if (oldState === 'playing') {
-            saveScore();
-            return 'gameover';
-        }
-        return oldState;
-    });
+    if (gameStateRef.current === 'playing') {
+        saveScore();
+        setGameState('gameover');
+    }
   }, [saveScore]);
 
   const resetGame = useCallback(() => {
@@ -98,7 +100,6 @@ export default function GameClient() {
       return;
     }
 
-    // Spawn new tiles
     const now = performance.now();
     if (now - lastSpawnTimeRef.current > currentSettings.spawnRate) {
         lastSpawnTimeRef.current = now;
