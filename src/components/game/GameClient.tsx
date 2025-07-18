@@ -25,120 +25,120 @@ export default function GameClient() {
   const [combo, setCombo] = useState(0);
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
-  const [, setHighScores] = useLocalStorage<HighScore[]>('highscores', []);
+  const [highScores, setHighScores] = useLocalStorage<HighScore[]>('highscores', []);
 
   const gameAreaRef = useRef<HTMLDivElement>(null);
-  const lastSpawnTimeRef = useRef<number>(0);
   const animationFrameId = useRef<number>();
+  const lastSpawnTimeRef = useRef<number>(0);
   
-  const scoreRef = useRef(0);
-  const gameStateRef = useRef(gameState);
-  const currentGameSettings = useRef<{songName: string; difficulty: Difficulty}>({songName: 'Random Mode', difficulty: 'medium'});
-
-  useEffect(() => {
-    scoreRef.current = score;
-  }, [score]);
-
-  useEffect(() => {
-    gameStateRef.current = gameState;
-  }, [gameState]);
-
-  const saveScore = useCallback(() => {
-    const finalScore = scoreRef.current;
-    if (finalScore > 0) {
+  const saveScore = useCallback((currentScore: number, currentDifficulty: Difficulty) => {
+    if (currentScore > 0) {
       const newHighScore: HighScore = {
         id: crypto.randomUUID(),
-        songName: currentGameSettings.current.songName,
-        score: finalScore,
-        difficulty: currentGameSettings.current.difficulty,
+        songName: 'Random Mode',
+        score: currentScore,
+        difficulty: currentDifficulty,
         date: new Date().toISOString(),
       };
       setHighScores(prev => [...prev, newHighScore]);
     }
   }, [setHighScores]);
 
-  const stopGame = useCallback(() => {
-    if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-    }
-    if (gameStateRef.current === 'playing') {
-        saveScore();
-        setGameState('gameover');
-    }
-  }, [saveScore]);
-
   const resetGame = useCallback(() => {
     setScore(0);
     setCombo(0);
     setTiles([]);
-    scoreRef.current = 0;
     if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
     }
   }, []);
   
-  const gameLoop = useCallback(() => {
-    const gameAreaHeight = gameAreaRef.current?.clientHeight ?? 0;
-    const currentSettings = DIFFICULTY_SETTINGS[currentGameSettings.current.difficulty];
-    let tileMissed = false;
+  const startGame = () => {
+    resetGame();
+    setGameState('playing');
+  };
 
-    setTiles(prevTiles => {
-      const updatedTiles = prevTiles.map(tile => ({ ...tile, y: tile.y + currentSettings.speed }));
-      const visibleTiles = updatedTiles.filter(tile => {
-        if (tile.y > gameAreaHeight) {
-          tileMissed = true;
-          return false;
-        }
-        return true;
-      });
-      return visibleTiles;
-    });
-
-    if (tileMissed) {
-      setCombo(0);
-      stopGame();
+  useEffect(() => {
+    if (gameState !== 'playing') {
       return;
     }
 
-    const now = performance.now();
-    if (now - lastSpawnTimeRef.current > currentSettings.spawnRate) {
-        lastSpawnTimeRef.current = now;
-        let newLane = Math.floor(Math.random() * LANES);
-        
-        setTiles(prevTiles => {
-            if (currentGameSettings.current.difficulty !== 'hard' && prevTiles.length > 0) {
-                const lastTile = prevTiles[prevTiles.length -1];
-                if (lastTile?.lane === newLane) {
-                    newLane = (newLane + 1) % LANES;
-                }
-            }
-            return [
-                ...prevTiles,
-                { id: now, lane: newLane, y: -TILE_HEIGHT, height: TILE_HEIGHT },
-            ];
+    lastSpawnTimeRef.current = performance.now();
+    let localScore = 0;
+    let localCombo = 0;
+    
+    const stopGame = () => {
+        if (animationFrameId.current) {
+            cancelAnimationFrame(animationFrameId.current);
+            animationFrameId.current = undefined;
+        }
+        saveScore(localScore, difficulty);
+        setGameState('gameover');
+    };
+
+    const gameLoop = () => {
+      const gameAreaHeight = gameAreaRef.current?.clientHeight ?? 0;
+      const currentSettings = DIFFICULTY_SETTINGS[difficulty];
+      let tileMissed = false;
+  
+      setTiles(prevTiles => {
+        const updatedTiles = prevTiles.map(tile => ({ ...tile, y: tile.y + currentSettings.speed }));
+        const visibleTiles = updatedTiles.filter(tile => {
+          if (tile.y > gameAreaHeight) {
+            tileMissed = true;
+            return false;
+          }
+          return true;
         });
-    }
+        return visibleTiles;
+      });
+  
+      if (tileMissed) {
+        setCombo(0);
+        localCombo = 0;
+        stopGame();
+        return;
+      }
+  
+      const now = performance.now();
+      if (now - lastSpawnTimeRef.current > currentSettings.spawnRate) {
+          lastSpawnTimeRef.current = now;
+          let newLane = Math.floor(Math.random() * LANES);
+          
+          setTiles(prevTiles => {
+              if (difficulty !== 'hard' && prevTiles.length > 0) {
+                  const lastTile = prevTiles[prevTiles.length -1];
+                  if (lastTile?.lane === newLane) {
+                      newLane = (newLane + 1) % LANES;
+                  }
+              }
+              return [
+                  ...prevTiles,
+                  { id: now, lane: newLane, y: -TILE_HEIGHT, height: TILE_HEIGHT },
+              ];
+          });
+      }
+      
+      setScore(current => {
+          localScore = current;
+          return current;
+      });
+      setCombo(current => {
+          localCombo = current;
+          return current;
+      });
+  
+      animationFrameId.current = requestAnimationFrame(gameLoop);
+    };
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [stopGame]);
 
-  const startGame = () => {
-    currentGameSettings.current = { songName: 'Random Mode', difficulty };
-    resetGame();
-    setGameState('playing');
-    lastSpawnTimeRef.current = performance.now();
-  };
-  
-  useEffect(() => {
-    if (gameState === 'playing') {
-      animationFrameId.current = requestAnimationFrame(gameLoop);
-    }
     return () => {
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [gameState, gameLoop]);
+  }, [gameState, difficulty, saveScore]);
   
   const handleLaneClick = (laneIndex: number) => {
     if (gameState !== 'playing') return;
@@ -159,8 +159,11 @@ export default function GameClient() {
     });
 
     if (hit) {
-      setScore(prev => prev + 10 + combo);
-      setCombo(prev => prev + 1);
+      setCombo(prev => {
+        const newCombo = prev + 1;
+        setScore(prevScore => prevScore + 10 + newCombo);
+        return newCombo;
+      });
       setTiles(newTiles);
     } else {
       setCombo(0);
