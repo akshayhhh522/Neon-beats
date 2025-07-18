@@ -52,6 +52,15 @@ export default function GameClient() {
         cancelAnimationFrame(animationFrameId.current);
     }
   }, []);
+
+  const stopGame = useCallback(() => {
+    if (animationFrameId.current) {
+      cancelAnimationFrame(animationFrameId.current);
+      animationFrameId.current = undefined;
+    }
+    saveScore(score, difficulty);
+    setGameState('gameover');
+  }, [score, difficulty, saveScore]);
   
   const startGame = () => {
     resetGame();
@@ -64,17 +73,7 @@ export default function GameClient() {
     }
 
     lastSpawnTimeRef.current = performance.now();
-    let localScore = 0;
     
-    const stopGame = () => {
-        if (animationFrameId.current) {
-            cancelAnimationFrame(animationFrameId.current);
-            animationFrameId.current = undefined;
-        }
-        saveScore(localScore, difficulty);
-        setGameState('gameover');
-    };
-
     const gameLoop = () => {
       const gameAreaHeight = gameAreaRef.current?.clientHeight ?? 0;
       const currentSettings = DIFFICULTY_SETTINGS[difficulty];
@@ -116,11 +115,6 @@ export default function GameClient() {
               ];
           });
       }
-      
-      setScore(current => {
-          localScore = current;
-          return current;
-      });
   
       animationFrameId.current = requestAnimationFrame(gameLoop);
     };
@@ -132,7 +126,7 @@ export default function GameClient() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [gameState, difficulty, saveScore]);
+  }, [gameState, difficulty, resetGame, stopGame]);
   
   const handleLaneClick = (laneIndex: number) => {
     if (gameState !== 'playing') return;
@@ -141,6 +135,7 @@ export default function GameClient() {
     const hitZoneTop = hitZoneBottom - HIT_ZONE_HEIGHT;
     
     let hit = false;
+    let missed = false;
     const newTiles = tiles.filter(tile => {
       if (tile.lane === laneIndex) {
         const tileBottom = tile.y + tile.height;
@@ -160,6 +155,9 @@ export default function GameClient() {
       });
       setTiles(newTiles);
     } else {
+      // If no tile was hit in this lane, check if any other tile should have been hit
+      // This is a simplification; a more robust implementation might handle this differently.
+      // For now, any click outside a hitable tile in the lane is a "miss" that resets combo.
       setCombo(0);
     }
   };
