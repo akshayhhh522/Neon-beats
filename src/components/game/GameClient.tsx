@@ -30,17 +30,17 @@ export default function GameClient() {
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const animationFrameId = useRef<number>();
   const lastSpawnTimeRef = useRef<number>(0);
-  const scoreRef = useRef(0);
-  const difficultyRef = useRef(difficulty);
-
+  
+  const scoreRef = useRef(score);
   useEffect(() => {
     scoreRef.current = score;
   }, [score]);
 
+  const difficultyRef = useRef(difficulty);
   useEffect(() => {
     difficultyRef.current = difficulty;
   }, [difficulty]);
-  
+
   const saveScore = useCallback(() => {
     if (scoreRef.current > 0) {
       const newHighScore: HighScore = {
@@ -54,6 +54,48 @@ export default function GameClient() {
     }
   }, [setHighScores]);
 
+  const stopGame = useCallback(() => {
+    if (animationFrameId.current) {
+      cancelAnimationFrame(animationFrameId.current);
+      animationFrameId.current = undefined;
+    }
+    saveScore();
+    setGameState('gameover');
+  }, [saveScore]);
+  
+  const handleLaneClick = useCallback((laneIndex: number) => {
+    if (gameState !== 'playing' || !gameAreaRef.current) return;
+
+    const gameAreaHeight = gameAreaRef.current.clientHeight;
+    const hitZoneBottom = gameAreaHeight - GAME_AREA_BOTTOM_PADDING;
+    const hitZoneTop = hitZoneBottom - HIT_ZONE_HEIGHT;
+    
+    let hit = false;
+    let targetTileId: number | null = null;
+    
+    const newTiles = [...tiles];
+    for (const tile of newTiles) {
+      if (tile.lane === laneIndex) {
+        const tileBottom = tile.y + tile.height;
+        if (tileBottom > hitZoneTop && tile.y < hitZoneBottom) {
+          hit = true;
+          targetTileId = tile.id;
+          break;
+        }
+      }
+    }
+
+    if (hit && targetTileId !== null) {
+      setTiles(currentTiles => currentTiles.filter(t => t.id !== targetTileId));
+      const newCombo = combo + 1;
+      setCombo(newCombo);
+      setScore(prevScore => prevScore + 10 + newCombo);
+    } else {
+      setCombo(0);
+    }
+  }, [tiles, combo, gameState]);
+
+
   const resetGame = useCallback(() => {
     setScore(0);
     setCombo(0);
@@ -63,15 +105,6 @@ export default function GameClient() {
         animationFrameId.current = undefined;
     }
   }, []);
-
-  const stopGame = useCallback(() => {
-    if (animationFrameId.current) {
-      cancelAnimationFrame(animationFrameId.current);
-      animationFrameId.current = undefined;
-    }
-    saveScore();
-    setGameState('gameover');
-  }, [saveScore]);
 
   const startGame = () => {
     resetGame();
@@ -94,14 +127,13 @@ export default function GameClient() {
   
       setTiles(prevTiles => {
         const updatedTiles = prevTiles.map(tile => ({ ...tile, y: tile.y + currentSettings.speed }));
-        const visibleTiles = updatedTiles.filter(tile => {
+        return updatedTiles.filter(tile => {
           if (tile.y > gameAreaHeight) {
             tileMissed = true;
             return false;
           }
           return true;
         });
-        return visibleTiles;
       });
   
       if (tileMissed) {
@@ -139,40 +171,7 @@ export default function GameClient() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [gameState, difficulty, resetGame, stopGame]);
-  
-  const handleLaneClick = (laneIndex: number) => {
-    if (gameState !== 'playing' || !gameAreaRef.current) return;
-
-    const gameAreaHeight = gameAreaRef.current.clientHeight;
-    const hitZoneBottom = gameAreaHeight - GAME_AREA_BOTTOM_PADDING;
-    const hitZoneTop = hitZoneBottom - HIT_ZONE_HEIGHT;
-    
-    let hit = false;
-    let targetTileId: number | null = null;
-
-    for (const tile of tiles) {
-      if (tile.lane === laneIndex) {
-        const tileBottom = tile.y + tile.height;
-        if (tileBottom > hitZoneTop && tile.y < hitZoneBottom) {
-          hit = true;
-          targetTileId = tile.id;
-          break;
-        }
-      }
-    }
-
-    if (hit && targetTileId !== null) {
-      setTiles(currentTiles => currentTiles.filter(t => t.id !== targetTileId));
-      setCombo(prev => {
-        const newCombo = prev + 1;
-        setScore(prevScore => prevScore + 10 + newCombo);
-        return newCombo;
-      });
-    } else {
-      setCombo(0);
-    }
-  };
+  }, [gameState, difficulty, stopGame]);
   
   const renderMenu = () => (
     <div className="bg-card/80 backdrop-blur-lg p-8 rounded-xl border border-accent/30 glowing-card w-full max-w-md text-center">
@@ -267,5 +266,3 @@ export default function GameClient() {
     </>
   );
 }
-
-    
