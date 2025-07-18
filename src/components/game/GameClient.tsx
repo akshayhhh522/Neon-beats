@@ -65,7 +65,6 @@ export default function GameClient() {
 
     lastSpawnTimeRef.current = performance.now();
     let localScore = 0;
-    let localCombo = 0;
     
     const stopGame = () => {
         if (animationFrameId.current) {
@@ -95,7 +94,6 @@ export default function GameClient() {
   
       if (tileMissed) {
         setCombo(0);
-        localCombo = 0;
         stopGame();
         return;
       }
@@ -121,10 +119,6 @@ export default function GameClient() {
       
       setScore(current => {
           localScore = current;
-          return current;
-      });
-      setCombo(current => {
-          localCombo = current;
           return current;
       });
   
