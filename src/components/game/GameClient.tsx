@@ -253,7 +253,7 @@ export default function GameClient() {
 
   return (
     <>
-      <audio ref={audioRef} src={song.url ?? ''} onEnded={endGame} />
+      {song.url && <audio ref={audioRef} src={song.url} onEnded={endGame} />}
       
       {gameState === 'menu' && renderMenu()}
       {gameState === 'playing' && renderGame()}
