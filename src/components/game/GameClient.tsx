@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { ChangeEvent } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,41 +14,29 @@ import {
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import { DIFFICULTY_SETTINGS, LANES, TILE_HEIGHT, HIT_ZONE_HEIGHT, GAME_AREA_BOTTOM_PADDING } from '@/lib/constants';
 import type { Tile, Difficulty, GameState, HighScore } from '@/lib/types';
-import { Play, Upload } from 'lucide-react';
+import { Play } from 'lucide-react';
 
 export default function GameClient() {
   const [gameState, setGameState] = useState<GameState>('menu');
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
   const [tiles, setTiles] = useState<Tile[]>([]);
-  const [song, setSong] = useState<{ name: string; url: string | null }>({ name: 'No song selected', url: null });
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [, setHighScores] = useLocalStorage<HighScore[]>('highscores', []);
 
-  const audioRef = useRef<HTMLAudioElement>(null);
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const lastSpawnTimeRef = useRef<number>(0);
   const animationFrameId = useRef<number>();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const scoreRef = useRef(0);
-  const currentGameSettings = useRef<{songName: string; difficulty: Difficulty}>({songName: 'No song selected', difficulty: 'medium'});
+  const currentGameSettings = useRef<{songName: string; difficulty: Difficulty}>({songName: 'Random Mode', difficulty: 'medium'});
 
   useEffect(() => {
     scoreRef.current = score;
   }, [score]);
-  
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setSong({ name: file.name, url });
-    }
-  };
 
   const saveScore = useCallback(() => {
     const finalScore = scoreRef.current;
@@ -69,9 +56,6 @@ export default function GameClient() {
     if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
     }
-    if (audioRef.current) {
-        audioRef.current.pause();
-    }
     setGameState(oldState => {
         if (oldState === 'playing') {
             saveScore();
@@ -86,9 +70,6 @@ export default function GameClient() {
     setCombo(0);
     setTiles([]);
     scoreRef.current = 0;
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-    }
     if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
     }
@@ -141,14 +122,10 @@ export default function GameClient() {
   }, [stopGame]);
 
   const startGame = () => {
-    if (!song.url) return;
-    currentGameSettings.current = { songName: song.name, difficulty };
+    currentGameSettings.current = { songName: 'Random Mode', difficulty };
     resetGame();
     setGameState('playing');
     lastSpawnTimeRef.current = performance.now();
-    if (audioRef.current) {
-      audioRef.current.play().catch(e => console.error("Error playing audio:", e));
-    }
   };
   
   useEffect(() => {
@@ -193,13 +170,6 @@ export default function GameClient() {
     <div className="bg-card/80 backdrop-blur-lg p-8 rounded-xl border border-accent/30 glowing-card w-full max-w-md text-center">
       <h2 className="text-4xl font-headline text-accent mb-6" style={{ textShadow: '0 0 10px hsl(var(--accent))' }}>Game Setup</h2>
       
-      <div className="mb-6">
-        <Button variant="outline" className="w-full border-primary text-primary glowing-button" onClick={() => fileInputRef.current?.click()}>
-          <Upload className="mr-2" /> {song.name}
-        </Button>
-        <Input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={handleFileChange} />
-      </div>
-
       <div className="mb-8">
         <Label className="text-lg text-primary mb-3 block">Difficulty</Label>
         <RadioGroup defaultValue="medium" value={difficulty} onValueChange={(v: Difficulty) => setDifficulty(v)} className="flex justify-center gap-4">
@@ -215,7 +185,7 @@ export default function GameClient() {
         </RadioGroup>
       </div>
 
-      <Button size="lg" disabled={!song.url} onClick={startGame} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 text-xl font-bold h-14">
+      <Button size="lg" onClick={startGame} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 text-xl font-bold h-14">
         <Play className="mr-2" /> Start
       </Button>
     </div>
@@ -269,8 +239,6 @@ export default function GameClient() {
 
   return (
     <>
-      {song.url && <audio ref={audioRef} src={song.url} onEnded={stopGame} />}
-      
       {gameState === 'menu' && renderMenu()}
       {gameState === 'playing' && renderGame()}
       
