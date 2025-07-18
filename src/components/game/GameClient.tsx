@@ -28,15 +28,15 @@ export default function GameClient() {
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [song, setSong] = useState<{ name: string; url: string | null }>({ name: 'No song selected', url: null });
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
-  const [highScores, setHighScores] = useLocalStorage<HighScore[]>('highscores', []);
+  const [, setHighScores] = useLocalStorage<HighScore[]>('highscores', []);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const lastSpawnTimeRef = useRef<number>(0);
   const animationFrameId = useRef<number>();
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const settings = DIFFICULTY_SETTINGS[difficulty];
+  
+  const currentGameSettings = useRef<{songName: string; difficulty: Difficulty}>({songName: '', difficulty: 'medium'});
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -59,40 +59,46 @@ export default function GameClient() {
     }
   }, []);
   
-  const saveScore = useCallback(() => {
-    if (score > 0) {
+  const saveScore = useCallback((currentScore: number) => {
+    if (currentScore > 0) {
       const newHighScore: HighScore = {
         id: crypto.randomUUID(),
-        songName: song.name,
-        score: score,
-        difficulty,
+        songName: currentGameSettings.current.songName,
+        score: currentScore,
+        difficulty: currentGameSettings.current.difficulty,
         date: new Date().toISOString(),
       };
       setHighScores(prev => [...prev, newHighScore]);
     }
-  }, [score, song.name, difficulty, setHighScores]);
+  }, [setHighScores]);
   
   const handleGameEnd = useCallback(() => {
-    setGameState('gameover');
-    if (animationFrameId.current) {
-      cancelAnimationFrame(animationFrameId.current);
-    }
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-    saveScore();
-  }, [saveScore]);
+    setGameState(oldState => {
+      if (oldState === 'playing') {
+        if (animationFrameId.current) {
+          cancelAnimationFrame(animationFrameId.current);
+        }
+        if (audioRef.current) {
+          audioRef.current.pause();
+        }
+        saveScore(score);
+        return 'gameover';
+      }
+      return oldState;
+    });
+  }, [saveScore, score]);
 
   const gameLoop = useCallback(() => {
     const gameAreaHeight = gameAreaRef.current?.clientHeight ?? 0;
+    const currentSettings = DIFFICULTY_SETTINGS[currentGameSettings.current.difficulty];
     let shouldEndGame = false;
 
     setTiles(prevTiles => {
-      const updatedTiles = prevTiles.map(tile => ({ ...tile, y: tile.y + settings.speed }));
+      const updatedTiles = prevTiles.map(tile => ({ ...tile, y: tile.y + currentSettings.speed }));
 
       const visibleTiles = updatedTiles.filter(tile => {
         if (tile.y > gameAreaHeight) {
-          shouldEndGame = true;
+          shouldEndGame = true; // A tile was missed
           return false;
         }
         return true;
@@ -112,12 +118,12 @@ export default function GameClient() {
 
     // Spawn new tiles
     const now = performance.now();
-    if (now - lastSpawnTimeRef.current > settings.spawnRate) {
+    if (now - lastSpawnTimeRef.current > currentSettings.spawnRate) {
         lastSpawnTimeRef.current = now;
         let newLane = Math.floor(Math.random() * LANES);
         
         setTiles(prevTiles => {
-            if (difficulty !== 'hard' && prevTiles.length > 0) {
+            if (currentGameSettings.current.difficulty !== 'hard' && prevTiles.length > 0) {
                 const lastTile = prevTiles[prevTiles.length -1];
                 if (lastTile?.lane === newLane) {
                     newLane = (newLane + 1) % LANES;
@@ -131,10 +137,11 @@ export default function GameClient() {
     }
 
     animationFrameId.current = requestAnimationFrame(gameLoop);
-  }, [settings.speed, settings.spawnRate, difficulty, handleGameEnd]);
+  }, [handleGameEnd]);
 
   const startGame = () => {
     if (!song.url) return;
+    currentGameSettings.current = { songName: song.name, difficulty };
     resetGame();
     setGameState('playing');
     lastSpawnTimeRef.current = performance.now();
